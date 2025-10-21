@@ -1,1 +1,4 @@
-pipecat-ai[daily,elevenlabs,openai,silero,google,runner]>=0.0.82
+pipecat-ai[daily,elevenlabs,openai,silero,google,runner,webrtc]>=0.0.82
+python-dotenv
+loguru
+Pillow
