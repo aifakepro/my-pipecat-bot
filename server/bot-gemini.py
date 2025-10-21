@@ -6,9 +6,6 @@
 """Gemini Bot Implementation."""
 
 import os
-import threading                               # ✅ добавлено
-from http.server import SimpleHTTPRequestHandler, HTTPServer  # ✅ добавлено
-
 from dotenv import load_dotenv
 from loguru import logger
 from PIL import Image
@@ -34,48 +31,8 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
 load_dotenv(override=True)
 
-import os
-import threading
-import socket
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-import traceback
 
-def keep_alive():
-    try:
-        port = int(os.environ.get("PORT", 8080))
-        addr = ("0.0.0.0", port)
-        # проверяем, свободен ли порт
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(addr)
-        except Exception as e:
-            print("Keep-alive: cannot bind port", addr, " —", e)
-            sock.close()
-            return
-        sock.close()
-
-        server = HTTPServer(addr, SimpleHTTPRequestHandler)
-        print(f"Keep-alive server starting on 0.0.0.0:{port}")
-        server.serve_forever()
-    except Exception:
-        print("Keep-alive server failed to start:")
-        traceback.print_exc()
-
-threading.Thread(target=keep_alive, daemon=True).start()
-
-
-# ✅ этот блок добавь ПЕРЕД остальным кодом — он держит Render “живым”
-def keep_alive():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
-    print(f"Keep-alive server running on port {port}")
-    server.serve_forever()
-
-threading.Thread(target=keep_alive, daemon=True).start()
-# ✅ конец вставки
-
-
+# Завантажуємо спрайти анімації
 sprites = []
 script_dir = os.path.dirname(__file__)
 for i in range(1, 26):
@@ -115,7 +72,7 @@ async def run_bot(transport: BaseTransport):
     messages = [
         {
             "role": "user",
-            "content": "You are Chatbot, a friendly robot...",
+            "content": "You are Chatbot, a friendly robot. You can chat with me about anything.",
         },
     ]
 
