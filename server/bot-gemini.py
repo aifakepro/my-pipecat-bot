@@ -34,6 +34,37 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
 load_dotenv(override=True)
 
+import os
+import threading
+import socket
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+import traceback
+
+def keep_alive():
+    try:
+        port = int(os.environ.get("PORT", 8080))
+        addr = ("0.0.0.0", port)
+        # проверяем, свободен ли порт
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(addr)
+        except Exception as e:
+            print("Keep-alive: cannot bind port", addr, " —", e)
+            sock.close()
+            return
+        sock.close()
+
+        server = HTTPServer(addr, SimpleHTTPRequestHandler)
+        print(f"Keep-alive server starting on 0.0.0.0:{port}")
+        server.serve_forever()
+    except Exception:
+        print("Keep-alive server failed to start:")
+        traceback.print_exc()
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
+
 # ✅ этот блок добавь ПЕРЕД остальным кодом — он держит Render “живым”
 def keep_alive():
     port = int(os.environ.get("PORT", 8080))
