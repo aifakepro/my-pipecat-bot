@@ -6,6 +6,11 @@
 """Gemini Bot Implementation."""
 
 import os
+import threading
+import socket
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+import traceback
+
 from dotenv import load_dotenv
 from loguru import logger
 from PIL import Image
@@ -32,7 +37,31 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 load_dotenv(override=True)
 
 
-# Завантажуємо спрайти анімації
+def keep_alive():
+    try:
+        port = int(os.environ.get("PORT", 8080))
+        addr = ("0.0.0.0", port)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(addr)
+        except Exception as e:
+            print("Keep-alive: cannot bind port", addr, " —", e)
+            sock.close()
+            return
+        sock.close()
+
+        server = HTTPServer(addr, SimpleHTTPRequestHandler)
+        print(f"Keep-alive server starting on 0.0.0.0:{port}")
+        server.serve_forever()
+    except Exception:
+        print("Keep-alive server failed to start:")
+        traceback.print_exc()
+
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
+
 sprites = []
 script_dir = os.path.dirname(__file__)
 for i in range(1, 26):
