@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipecat Bot Client</title>
+    <script src="https://unpkg.com/@daily-co/daily-js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        input {
+            padding: 10px;
+            width: 400px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        #video-container {
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pipecat Bot Client</h1>
+    
+    <div id="controls">
+        <input type="text" id="baseUrl" placeholder="Base URL (https://my-pipecat-bot.onrender.com)" value="https://my-pipecat-bot.onrender.com">
+        <button id="connectBtn">Connect</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+    
+    <div id="status">Status: Disconnected</div>
+    
+    <div id="video-container"></div>
+
+    <script>
+        let callFrame = null;
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const status = document.getElementById('status');
+        const baseUrlInput = document.getElementById('baseUrl');
+
+        connectBtn.addEventListener('click', async () => {
+            const baseUrl = baseUrlInput.value.trim();
+            if (!baseUrl) {
+                alert('Please enter Base URL');
+                return;
+            }
+
+            try {
+                status.textContent = 'Status: Connecting...';
+                connectBtn.disabled = true;
+
+                // Get room URL and token from bot server
+                const response = await fetch(`${baseUrl}/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Create Daily call frame
+                callFrame = window.DailyIframe.createFrame(
+                    document.getElementById('video-container'),
+                    {
+                        showLeaveButton: true,
+                        iframeStyle: {
+                            width: '100%',
+                            height: '100%',
+                            border: '0',
+                            borderRadius: '5px'
+                        }
+                    }
+                );
+
+                // Join the call
+                await callFrame.join({
+                    url: data.room_url,
+                    token: data.token
+                });
+
+                status.textContent = 'Status: Connected';
+                disconnectBtn.disabled = false;
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                status.textContent = `Status: Error - ${error.message}`;
+                connectBtn.disabled = false;
+            }
+        });
+
+        disconnectBtn.addEventListener('click', async () => {
+            if (callFrame) {
+                await callFrame.leave();
+                callFrame.destroy();
+                callFrame = null;
+            }
+            status.textContent = 'Status: Disconnected';
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
