@@ -3,13 +3,16 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-"""Gemini Bot Implementation."""
+"""Gemini Bot Implementation with LiveKit."""
 
 import os
 import threading
 import socket
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import traceback
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+import uvicorn
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -29,17 +32,45 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
-from pipecat.runner.types import RunnerArguments
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
-from pipecat.transports.base_transport import BaseTransport
-from pipecat.transports.daily.transport import DailyParams, DailyTransport
+from pipecat.transports.services.livekit import LiveKitTransport, LiveKitParams  # Импорт для LiveKit
+from pipecat.runner.types import RunnerArguments
 
 load_dotenv(override=True)
 
+# FastAPI для клиентского интерфейса
+app = FastAPI()
+
+@app.get("/client")
+async def serve_client():
+    return HTMLResponse(content="""
+    <!DOCTYPE html>
+    <html>
+    <head><title>Pipecat Bot with LiveKit</title><script src="https://unpkg.com/livekit-client@2/dist/livekit-client.umd.js"></script></head>
+    <body>
+        <video id="localVideo" autoplay muted></video>
+        <video id="remoteVideo" autoplay></video>
+        <button onclick="joinRoom()">Join Room</button>
+        <script>
+            const room = new LivekitClient.Room();
+            async function joinRoom() {
+                await room.connect('YOUR_LIVEKIT_URL', 'YOUR_LIVEKIT_TOKEN', { autoSubscribe: true, publishDefaults: { videoEnabled: true } });
+                room.on('trackSubscribed', (track, publication, participant) => {
+                    const videoEl = participant.identity === 'bot' ? document.getElementById('remoteVideo') : document.getElementById('localVideo');
+                    videoEl.srcObject = new MediaStream([track.mediaStreamTrack]);
+                });
+            }
+        </script>
+    </body>
+    </html>
+    """)
+
+# Запуск Uvicorn
+port = int(os.environ.get("PORT", 7860))
+threading.Thread(target=lambda: uvicorn.run(app, host="0.0.0.0", port=port), daemon=True).start()
 
 def keep_alive():
     try:
-        port = int(os.environ.get("PORT", 8080))
         addr = ("0.0.0.0", port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -58,9 +89,7 @@ def keep_alive():
         print("Keep-alive server failed to start:")
         traceback.print_exc()
 
-
 threading.Thread(target=keep_alive, daemon=True).start()
-
 
 sprites = []
 script_dir = os.path.dirname(__file__)
@@ -73,7 +102,6 @@ flipped = sprites[::-1]
 sprites.extend(flipped)
 quiet_frame = sprites[0]
 talking_frame = SpriteFrame(images=sprites)
-
 
 class TalkingAnimation(FrameProcessor):
     def __init__(self):
@@ -91,8 +119,7 @@ class TalkingAnimation(FrameProcessor):
             self._is_talking = False
         await self.push_frame(frame, direction)
 
-
-async def run_bot(transport: BaseTransport):
+async def run_bot(transport):
     llm = GeminiLiveLLMService(
         api_key=os.getenv("GOOGLE_API_KEY"),
         voice_id="Puck",
@@ -145,13 +172,27 @@ async def run_bot(transport: BaseTransport):
     runner = PipelineRunner(handle_sigint=False)
     await runner.run(task)
 
-
 async def bot(runner_args: RunnerArguments):
-    transport = DailyTransport(
-        runner_args.room_url,
-        runner_args.token,
-        "Pipecat Bot",
-        params=DailyParams(
+    # Генерация токена для LiveKit (нужен для подключения)
+    import livekit.api  # Убедись, что livekit-api установлен
+    api = livekit.api.AccessToken(
+        api_key=os.getenv("LIVEKIT_API_KEY"),
+        api_secret=os.getenv("LIVEKIT_API_SECRET"),
+    ).with_name("Pipecat Bot").with_identity("bot").with_grants(
+        livekit.api.VideoGrants(
+            room_join=True,
+            room=list=True,
+            room_admin=True,
+            can_publish=True,
+            can_subscribe=True,
+        )
+    ).to_jwt()
+
+    transport = LiveKitTransport(
+        url=os.getenv("LIVEKIT_URL", "wss://your-project.livekit.cloud"),  # Твой URL из дашборда
+        token=api,  # JWT токен
+        room_name="my-room",  # Имя комнаты
+        params=LiveKitParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             video_out_enabled=True,
@@ -162,7 +203,6 @@ async def bot(runner_args: RunnerArguments):
         ),
     )
     await run_bot(transport)
-
 
 if __name__ == "__main__":
     from pipecat.runner.run import main
