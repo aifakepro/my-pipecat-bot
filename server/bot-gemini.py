@@ -1,23 +1,18 @@
 # Copyright (c) 2024–2025, Daily
-#
 # SPDX-License-Identifier: BSD 2-Clause License
-#
 
-"""Gemini Bot Implementation with LiveKit."""
+"""Gemini Bot Implementation with LiveKit — Render-ready."""
 
 import os
 import threading
-import socket
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-import traceback
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 import uvicorn
-import livekit.api
-from PIL import Image
 
 from dotenv import load_dotenv
 from loguru import logger
+from PIL import Image
+
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
@@ -36,83 +31,95 @@ from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIPro
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.transports.services.livekit import LiveKitTransport, LiveKitParams
 from pipecat.runner.types import RunnerArguments
+import livekit.api
 
 load_dotenv(override=True)
 
+# Убедимся, что FastAPI использует правильный корень
 app = FastAPI()
 
 @app.get("/client")
 async def serve_client():
-    client_token = livekit.api.AccessToken(
-        api_key=os.getenv("LIVEKIT_API_KEY"),
-        api_secret=os.getenv("LIVEKIT_API_SECRET"),
-    ).with_name("Client").with_identity("client").with_grants(
-        livekit.api.VideoGrants(
-            room_join=True,
-            room="my-room",
-            can_publish=True,
-            can_subscribe=True,
-        )
-    ).to_jwt()
+    try:
+        client_token = livekit.api.AccessToken(
+            api_key=os.getenv("LIVEKIT_API_KEY"),
+            api_secret=os.getenv("LIVEKIT_API_SECRET"),
+        ).with_name("Client").with_identity("client").with_grants(
+            livekit.api.VideoGrants(
+                room_join=True,
+                room="my-room",
+                can_publish=True,
+                can_subscribe=True,
+            )
+        ).to_jwt()
+    except Exception as e:
+        logger.error(f"Failed to generate client token: {e}")
+        return HTMLResponse(content="<h2>Server misconfigured: check LIVEKIT_API_KEY/SECRET</h2>")
 
+    livekit_url = os.getenv("LIVEKIT_URL", "wss://your-project.livekit.cloud")
     return HTMLResponse(content=f"""
     <!DOCTYPE html>
     <html>
-    <head><title>Pipecat Bot with LiveKit</title><script src="https://unpkg.com/livekit-client@2/dist/livekit-client.umd.js"></script></head>
+    <head>
+        <title>Pipecat Bot with LiveKit</title>
+        <script src="https://unpkg.com/livekit-client@2/dist/livekit-client.umd.js"></script>
+        <style>
+            body {{ font-family: sans-serif; text-align: center; padding: 20px; }}
+            video {{ width: 45%; height: auto; border: 1px solid #ccc; margin: 10px; }}
+            button {{ padding: 10px 20px; font-size: 16px; margin-top: 10px; }}
+        </style>
+    </head>
     <body>
-        <video id="localVideo" autoplay muted></video>
-        <video id="remoteVideo" autoplay></video>
+        <h1>Pipecat + LiveKit + Gemini</h1>
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="remoteVideo" autoplay playsinline></video>
+        <br>
         <button onclick="joinRoom()">Join Room</button>
         <script>
             const room = new LivekitClient.Room();
             async function joinRoom() {{
-                await room.connect('{os.getenv("LIVEKIT_URL")}', '{client_token}', {{ autoSubscribe: true, publishDefaults: {{ videoEnabled: true }} }});
-                room.on('trackSubscribed', (track, publication, participant) => {{
-                    const videoEl = participant.identity === 'bot' ? document.getElementById('remoteVideo') : document.getElementById('localVideo');
-                    videoEl.srcObject = new MediaStream([track.mediaStreamTrack]);
-                }});
+                try {{
+                    await room.connect('{livekit_url}', '{client_token}', {{
+                        autoSubscribe: true,
+                        publishDefaults: {{ videoEnabled: true, audioEnabled: true }}
+                    }});
+                    room.on('trackSubscribed', (track, publication, participant) => {{
+                        const videoEl = participant.identity === 'bot' 
+                            ? document.getElementById('remoteVideo') 
+                            : document.getElementById('localVideo');
+                        videoEl.srcObject = new MediaStream([track.mediaStreamTrack]);
+                    }});
+                    console.log("Connected to room");
+                }} catch (e) {{
+                    console.error("Join failed:", e);
+                    alert("Failed to join room: " + e.message);
+                }}
             }}
         </script>
     </body>
     </html>
     """)
 
+# Запуск FastAPI в фоне
 port = int(os.environ.get("PORT", 7860))
-threading.Thread(target=lambda: uvicorn.run(app, host="0.0.0.0", port=port), daemon=True).start()
+threading.Thread(target=lambda: uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning"), daemon=True).start()
 
-def keep_alive():
-    try:
-        addr = ("0.0.0.0", port)
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(addr)
-        except Exception as e:
-            print("Keep-alive: cannot bind port", addr, " —", e)
-            sock.close()
-            return
-        sock.close()
-
-        server = HTTPServer(addr, SimpleHTTPRequestHandler)
-        print(f"Keep-alive server starting on 0.0.0.0:{port}")
-        server.serve_forever()
-    except Exception:
-        print("Keep-alive server failed to start:")
-        traceback.print_exc()
-
-threading.Thread(target=keep_alive, daemon=True).start()
-
+# Загрузка спрайтов
 sprites = []
 script_dir = os.path.dirname(__file__)
-for i in range(1, 26):
-    full_path = os.path.join(script_dir, f"assets/robot0{i}.png")
-    with Image.open(full_path) as img:
-        sprites.append(OutputImageRawFrame(image=img.tobytes(), size=img.size, format=img.format))
-
-flipped = sprites[::-1]
-sprites.extend(flipped)
-quiet_frame = sprites[0]
-talking_frame = SpriteFrame(images=sprites)
+try:
+    for i in range(1, 26):
+        full_path = os.path.join(script_dir, "assets", f"robot0{i}.png")
+        with Image.open(full_path) as img:
+            sprites.append(OutputImageRawFrame(image=img.tobytes(), size=img.size, format=img.format))
+    flipped = sprites[::-1]
+    sprites.extend(flipped)
+    quiet_frame = sprites[0]
+    talking_frame = SpriteFrame(images=sprites)
+except Exception as e:
+    logger.error(f"Failed to load sprites: {e}")
+    quiet_frame = None
+    talking_frame = None
 
 class TalkingAnimation(FrameProcessor):
     def __init__(self):
@@ -122,11 +129,12 @@ class TalkingAnimation(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, BotStartedSpeakingFrame):
-            if not self._is_talking:
+            if not self._is_talking and talking_frame:
                 await self.push_frame(talking_frame)
                 self._is_talking = True
         elif isinstance(frame, BotStoppedSpeakingFrame):
-            await self.push_frame(quiet_frame)
+            if quiet_frame:
+                await self.push_frame(quiet_frame)
             self._is_talking = False
         await self.push_frame(frame, direction)
 
@@ -163,7 +171,8 @@ async def run_bot(transport):
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
         observers=[RTVIObserver(rtvi)],
     )
-    await task.queue_frame(quiet_frame)
+    if quiet_frame:
+        await task.queue_frame(quiet_frame)
 
     @rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
@@ -172,7 +181,7 @@ async def run_bot(transport):
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, participant):
-        logger.info("Client connected")
+        logger.info(f"Client connected: {participant['id']}")
         await transport.capture_participant_transcription(participant["id"])
 
     @transport.event_handler("on_client_disconnected")
@@ -203,7 +212,7 @@ async def bot(runner_args: RunnerArguments):
         params=LiveKitParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
-            video_out_enabled=True,
+            video_out_enabled=bool(quiet_frame),  # только если есть спрайты
             video_out_width=1024,
             video_out_height=576,
             vad_analyzer=SileroVADAnalyzer(),
