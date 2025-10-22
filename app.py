@@ -99,7 +99,7 @@ def chat_with_gemini():
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(user_text)
         resp_text = getattr(response, "text", None) or str(response)
         return jsonify({"response": resp_text})
