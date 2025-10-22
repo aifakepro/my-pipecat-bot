@@ -1,65 +1,87 @@
 import os
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
-from pipecat_ai_small_webrtc_prebuilt.frontend import SmallWebRTCPrebuiltUI
+import io
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import StreamingResponse
+from dotenv import load_dotenv
+import httpx
+import google.generativeai as genai
+from openai import OpenAI
 
-from pipecat.frames.frames import OutputImageRawFrame, SpriteFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineTask, PipelineParams
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
-from pipecat.transports.services.small_webrtc import SmallWebRTCTransport, SmallWebRTCTransportParams
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.runner.types import RunnerArguments
-from PIL import Image
+load_dotenv()
 
 app = FastAPI()
-app.mount("/prebuilt", SmallWebRTCPrebuiltUI)
 
-@app.get("/", include_in_schema=False)
-async def root():
-    return RedirectResponse(url="/prebuilt/")
+# Настройка
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # для Whisper
 
-# Загрузка спрайтов (опционально)
-quiet_frame = None
-try:
-    img = Image.open("server/assets/robot01.png")
-    quiet_frame = OutputImageRawFrame(image=img.tobytes(), size=img.size, format=img.format)
-except:
-    pass
-
-async def run_bot(transport):
-    llm = GeminiLiveLLMService(api_key=os.getenv("GOOGLE_API_KEY"), voice_id="Puck")
-    context = OpenAILLMContext([{"role": "user", "content": "You are a friendly robot."}])
-    context_agg = llm.create_context_aggregator(context)
-
-    pipeline = Pipeline([
-        transport.input(),
-        context_agg.user(),
-        llm,
-        transport.output(),
-        context_agg.assistant(),
-    ])
-
-    task = PipelineTask(pipeline, params=PipelineParams(enable_metrics=True))
-    if quiet_frame:
-        await task.queue_frame(quiet_frame)
-
-    runner = PipelineRunner()
-    await runner.run(task)
-
-async def bot(runner_args: RunnerArguments):
-    transport = SmallWebRTCTransport(
-        params=SmallWebRTCTransportParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-            video_out_enabled=bool(quiet_frame),
-            vad_analyzer=SileroVADAnalyzer(),
+# STT: Whisper
+def transcribe_audio(audio_bytes: bytes) -> str:
+    try:
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = "audio.webm"  # или .wav
+        transcript = openai_client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            response_format="text"
         )
-    )
-    await run_bot(transport)
+        return transcript.strip()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"STT failed: {e}")
 
-if __name__ == "__main__":
-    from pipecat.runner.run import main
-    main()
+# LLM: Gemini
+def get_gemini_response(text: str) -> str:
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(
+            f"You are a friendly robot. Answer briefly: {text}"
+        )
+        return response.text.strip()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM failed: {e}")
+
+# TTS: ElevenLabs
+async def text_to_speech(text: str) -> bytes:
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+                headers={"xi-api-key": elevenlabs_key},
+                json={
+                    "text": text,
+                    "model_id": "eleven_multilingual_v2",
+                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.8}
+                }
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=500, detail="TTS failed")
+            return resp.content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {e}")
+
+# Эндпоинт: аудио → текст → LLM → аудио
+@app.post("/chat")
+async def chat(audio: UploadFile = File(...)):
+    if not audio.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="File must be audio")
+
+    # 1. Получить байты
+    audio_bytes = await audio.read()
+
+    # 2. STT
+    user_text = transcribe_audio(audio_bytes)
+    print("User:", user_text)
+
+    # 3. LLM
+    bot_text = get_gemini_response(user_text)
+    print("Bot:", bot_text)
+
+    # 4. TTS
+    audio_response = await text_to_speech(bot_text)
+
+    # 5. Отдать аудио
+    return StreamingResponse(
+        io.BytesIO(audio_response),
+        media_type="audio/mpeg"
+    )
