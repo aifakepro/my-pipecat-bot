@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pipecat Daily Client</title>
+    <title>Pipecat SmallWebRTC Client</title>
     <style>
         * {
             margin: 0;
@@ -187,23 +187,15 @@
 <body>
     <div class="container">
         <h1>🤖 Gemini Bot Client</h1>
-        <p class="subtitle">Connect to your Pipecat Daily bot</p>
+        <p class="subtitle">Connect via SmallWebRTC Transport</p>
 
         <div class="input-group">
-            <label for="roomUrl">Room URL</label>
+            <label for="serverUrl">Server URL</label>
             <input 
                 type="text" 
-                id="roomUrl" 
-                placeholder="https://your-domain.daily.co/room-name"
-                value="https://your-domain.daily.co/your-room">
-        </div>
-
-        <div class="input-group">
-            <label for="token">Token (optional)</label>
-            <input 
-                type="text" 
-                id="token" 
-                placeholder="Leave empty if room doesn't require token">
+                id="serverUrl" 
+                placeholder="https://my-pipecat-bot.onrender.com"
+                value="https://my-pipecat-bot.onrender.com">
         </div>
 
         <div class="button-group">
@@ -220,23 +212,22 @@
         </div>
 
         <div class="info">
-            <strong>Note:</strong> Make sure your bot server is running and you have a valid Daily room URL.
+            <strong>Note:</strong> This connects to your Pipecat bot using SmallWebRTC peer-to-peer transport.
         </div>
     </div>
 
     <script type="module">
-        import { PipecatClient, RTVIEvent } from 'https://cdn.jsdelivr.net/npm/@pipecat-ai/client-js@0.4.2/+esm';
-        import { DailyTransport } from 'https://cdn.jsdelivr.net/npm/@pipecat-ai/daily-transport@1.2.1/+esm';
+        import { RTVIClient } from 'https://cdn.jsdelivr.net/npm/@pipecat-ai/client-js@0.4.2/+esm';
+        import { SmallWebRTCTransport } from 'https://cdn.jsdelivr.net/npm/@pipecat-ai/small-webrtc-transport@1.2.1/+esm';
 
-        const roomUrlInput = document.getElementById('roomUrl');
-        const tokenInput = document.getElementById('token');
+        const serverUrlInput = document.getElementById('serverUrl');
         const connectBtn = document.getElementById('connectBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
         const statusDiv = document.getElementById('status');
         const videoContainer = document.getElementById('videoContainer');
         const botVideo = document.getElementById('botVideo');
 
-        let pcClient = null;
+        let rtviClient = null;
 
         function updateStatus(message, type) {
             statusDiv.className = `status ${type}`;
@@ -255,11 +246,10 @@
         }
 
         connectBtn.addEventListener('click', async () => {
-            const roomUrl = roomUrlInput.value.trim();
-            const token = tokenInput.value.trim();
+            const serverUrl = serverUrlInput.value.trim();
 
-            if (!roomUrl) {
-                updateStatus('Please enter a room URL', 'error');
+            if (!serverUrl) {
+                updateStatus('Please enter a server URL', 'error');
                 return;
             }
 
@@ -267,16 +257,23 @@
                 updateStatus('<span class="spinner"></span>Connecting...', 'connecting');
                 setButtonsState(true);
 
-                pcClient = new PipecatClient({
-                    transport: new DailyTransport(),
+                rtviClient = new RTVIClient({
+                    transport: new SmallWebRTCTransport(),
                     enableMic: true,
                     enableCam: false,
+                    params: {
+                        baseUrl: serverUrl,
+                        endpoints: {
+                            connect: '/api/offer'
+                        }
+                    },
                     callbacks: {
                         onConnected: () => {
-                            console.log('[CALLBACK] User connected');
+                            console.log('[CALLBACK] Connected');
+                            updateStatus('Connected to server', 'connected');
                         },
                         onDisconnected: () => {
-                            console.log('[CALLBACK] User disconnected');
+                            console.log('[CALLBACK] Disconnected');
                             updateStatus('Disconnected', 'disconnected');
                             setButtonsState(false);
                             videoContainer.classList.remove('active');
@@ -290,53 +287,42 @@
                         },
                         onBotDisconnected: () => {
                             console.log('[CALLBACK] Bot disconnected');
-                            updateStatus('Bot disconnected', 'disconnected');
                         },
                         onBotReady: () => {
-                            console.log('[CALLBACK] Bot ready to chat!');
+                            console.log('[CALLBACK] Bot ready!');
                             updateStatus('Bot ready! Start talking', 'connected');
                         },
-                        onRemoteVideoTrack: (track, participant) => {
-                            console.log('[CALLBACK] Remote video track received');
-                            if (track) {
+                        onTrackStarted: (track, participant) => {
+                            console.log('[CALLBACK] Track started:', track.kind);
+                            if (track.kind === 'video') {
                                 const stream = new MediaStream([track]);
                                 botVideo.srcObject = stream;
                                 videoContainer.classList.add('active');
                             }
+                        },
+                        onError: (error) => {
+                            console.error('[CALLBACK] Error:', error);
+                            updateStatus(`Error: ${error.message}`, 'error');
                         }
                     }
                 });
 
-                // Listen to events
-                pcClient.on(RTVIEvent.TransportStateChanged, (state) => {
-                    console.log('[EVENT] Transport state:', state);
-                });
-
-                pcClient.on(RTVIEvent.BotReady, () => {
-                    console.log('[EVENT] Bot ready');
-                });
-
-                const connectOptions = { url: roomUrl };
-                if (token) {
-                    connectOptions.token = token;
-                }
-
-                await pcClient.connect(connectOptions);
-                updateStatus('Connected successfully', 'connected');
+                await rtviClient.connect();
+                console.log('Successfully connected!');
 
             } catch (error) {
                 console.error('Connection error:', error);
                 updateStatus(`Error: ${error.message}`, 'error');
                 setButtonsState(false);
-                pcClient = null;
+                rtviClient = null;
             }
         });
 
         disconnectBtn.addEventListener('click', async () => {
-            if (pcClient) {
+            if (rtviClient) {
                 try {
-                    await pcClient.disconnect();
-                    pcClient = null;
+                    await rtviClient.disconnect();
+                    rtviClient = null;
                     updateStatus('Disconnected', 'disconnected');
                     setButtonsState(false);
                     videoContainer.classList.remove('active');
