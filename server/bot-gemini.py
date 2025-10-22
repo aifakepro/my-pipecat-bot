@@ -13,10 +13,11 @@ import traceback
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 import uvicorn
+import livekit.api
+from PIL import Image
 
 from dotenv import load_dotenv
 from loguru import logger
-from PIL import Image
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
@@ -33,17 +34,28 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
-from pipecat.transports.services.livekit import LiveKitTransport, LiveKitParams  # Импорт для LiveKit
+from pipecat.transports.services.livekit import LiveKitTransport, LiveKitParams
 from pipecat.runner.types import RunnerArguments
 
 load_dotenv(override=True)
 
-# FastAPI для клиентского интерфейса
 app = FastAPI()
 
 @app.get("/client")
 async def serve_client():
-    return HTMLResponse(content="""
+    client_token = livekit.api.AccessToken(
+        api_key=os.getenv("LIVEKIT_API_KEY"),
+        api_secret=os.getenv("LIVEKIT_API_SECRET"),
+    ).with_name("Client").with_identity("client").with_grants(
+        livekit.api.VideoGrants(
+            room_join=True,
+            room="my-room",
+            can_publish=True,
+            can_subscribe=True,
+        )
+    ).to_jwt()
+
+    return HTMLResponse(content=f"""
     <!DOCTYPE html>
     <html>
     <head><title>Pipecat Bot with LiveKit</title><script src="https://unpkg.com/livekit-client@2/dist/livekit-client.umd.js"></script></head>
@@ -53,19 +65,18 @@ async def serve_client():
         <button onclick="joinRoom()">Join Room</button>
         <script>
             const room = new LivekitClient.Room();
-            async function joinRoom() {
-                await room.connect('YOUR_LIVEKIT_URL', 'YOUR_LIVEKIT_TOKEN', { autoSubscribe: true, publishDefaults: { videoEnabled: true } });
-                room.on('trackSubscribed', (track, publication, participant) => {
+            async function joinRoom() {{
+                await room.connect('{os.getenv("LIVEKIT_URL")}', '{client_token}', {{ autoSubscribe: true, publishDefaults: {{ videoEnabled: true }} }});
+                room.on('trackSubscribed', (track, publication, participant) => {{
                     const videoEl = participant.identity === 'bot' ? document.getElementById('remoteVideo') : document.getElementById('localVideo');
                     videoEl.srcObject = new MediaStream([track.mediaStreamTrack]);
-                });
-            }
+                }});
+            }}
         </script>
     </body>
     </html>
     """)
 
-# Запуск Uvicorn
 port = int(os.environ.get("PORT", 7860))
 threading.Thread(target=lambda: uvicorn.run(app, host="0.0.0.0", port=port), daemon=True).start()
 
@@ -173,25 +184,22 @@ async def run_bot(transport):
     await runner.run(task)
 
 async def bot(runner_args: RunnerArguments):
-    # Генерация токена для LiveKit (нужен для подключения)
-    import livekit.api  # Убедись, что livekit-api установлен
-    api = livekit.api.AccessToken(
+    bot_token = livekit.api.AccessToken(
         api_key=os.getenv("LIVEKIT_API_KEY"),
         api_secret=os.getenv("LIVEKIT_API_SECRET"),
     ).with_name("Pipecat Bot").with_identity("bot").with_grants(
         livekit.api.VideoGrants(
             room_join=True,
-            room=list=True,
-            room_admin=True,
+            room="my-room",
             can_publish=True,
             can_subscribe=True,
         )
     ).to_jwt()
 
     transport = LiveKitTransport(
-        url=os.getenv("LIVEKIT_URL", "wss://your-project.livekit.cloud"),  # Твой URL из дашборда
-        token=api,  # JWT токен
-        room_name="my-room",  # Имя комнаты
+        url=os.getenv("LIVEKIT_URL"),
+        token=bot_token,
+        room_name="my-room",
         params=LiveKitParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
