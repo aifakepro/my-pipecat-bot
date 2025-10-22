@@ -4,6 +4,7 @@ import requests
 import os
 from io import BytesIO
 import google.generativeai as genai
+from gtts import gTTS
 
 app = Flask(__name__)
 CORS(app)
@@ -12,6 +13,9 @@ CORS(app)
 DEEPGRAM_API_KEY = os.environ.get('DEEPGRAM_API_KEY')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY')
+
+# Выбор TTS провайдера: 'elevenlabs' или 'gtts'
+TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'gtts')  # по умолчанию gtts
 
 @app.route('/')
 def home():
@@ -111,29 +115,32 @@ def chat_with_gemini():
         app.logger.exception("Ошибка при вызове Gemini")
         return jsonify({"error": "Gemini API error", "details": str(e)}), 500
 
-@app.route('/speak', methods=['POST'])
-def text_to_speech():
-    data = request.get_json(silent=True)
-    if not data or 'text' not in data:
-        app.logger.error("Нет текста в запросе /speak")
-        return jsonify({"error": "No text provided"}), 400
+def tts_gtts(text):
+    """Google Text-to-Speech (бесплатно, без ограничений)"""
+    try:
+        # Определяем язык (упрощенно)
+        # Можно добавить более сложную логику определения языка
+        lang = 'ru' if any('\u0400' <= c <= '\u04FF' for c in text) else 'en'
+        
+        app.logger.info(f"Используем gTTS с языком: {lang}")
+        
+        tts = gTTS(text=text, lang=lang, slow=False)
+        audio_buffer = BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        app.logger.info(f"gTTS успешно сгенерировал аудио")
+        return audio_buffer
+    except Exception as e:
+        app.logger.exception("Ошибка в gTTS")
+        raise
 
-    text = data.get('text', '').strip()
-    
-    # Проверка на пустой текст после очистки
-    if not text:
-        app.logger.error("Текст пустой после strip()")
-        return jsonify({"error": "Empty text provided"}), 400
-    
-    app.logger.info(f"Запрос на озвучку: {text[:100]}...")  # Логируем первые 100 символов
-
+def tts_elevenlabs(text):
+    """ElevenLabs TTS (платно/ограниченно бесплатно)"""
     if not ELEVENLABS_API_KEY:
-        app.logger.error("ElevenLabs API key не настроен")
-        return jsonify({"error": "ElevenLabs API key not configured"}), 500
+        raise ValueError("ElevenLabs API key не настроен")
 
-    # Используем стандартный голос Rachel (англ) или Adam (англ)
-    # Для русского языка лучше использовать голос, поддерживающий multilingual
-    VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel - поддерживает multilingual
+    VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
     
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
     headers = {
@@ -142,7 +149,6 @@ def text_to_speech():
         "xi-api-key": ELEVENLABS_API_KEY
     }
     
-    # Ограничиваем длину текста (ElevenLabs имеет лимиты)
     max_chars = 5000
     if len(text) > max_chars:
         text = text[:max_chars]
@@ -157,47 +163,59 @@ def text_to_speech():
         }
     }
 
-    app.logger.info(f"Отправка запроса в ElevenLabs с voice_id={VOICE_ID}")
+    resp = requests.post(url, json=payload, headers=headers, timeout=60)
+    
+    if resp.status_code != 200:
+        error_text = resp.text
+        app.logger.error(f"ElevenLabs error: {error_text}")
+        raise ValueError(f"ElevenLabs API error: {error_text}")
+
+    audio_bytes = resp.content
+    
+    if not audio_bytes:
+        raise ValueError("Empty audio response from ElevenLabs")
+    
+    return BytesIO(audio_bytes)
+
+@app.route('/speak', methods=['POST'])
+def text_to_speech():
+    data = request.get_json(silent=True)
+    if not data or 'text' not in data:
+        app.logger.error("Нет текста в запросе /speak")
+        return jsonify({"error": "No text provided"}), 400
+
+    text = data.get('text', '').strip()
+    
+    if not text:
+        app.logger.error("Текст пустой после strip()")
+        return jsonify({"error": "Empty text provided"}), 400
+    
+    app.logger.info(f"Запрос на озвучку ({TTS_PROVIDER}): {text[:100]}...")
 
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=60)  # Увеличен таймаут
-        
-        app.logger.info(f"ElevenLabs status: {resp.status_code}")
-        
-        if resp.status_code != 200:
-            error_text = resp.text
-            app.logger.error(f"ElevenLabs error: {error_text}")
+        if TTS_PROVIDER == 'gtts':
+            audio_buffer = tts_gtts(text)
+            return send_file(audio_buffer, mimetype="audio/mpeg")
+        elif TTS_PROVIDER == 'elevenlabs':
+            audio_buffer = tts_elevenlabs(text)
+            return send_file(audio_buffer, mimetype="audio/mpeg")
+        else:
+            return jsonify({"error": f"Unknown TTS provider: {TTS_PROVIDER}"}), 500
             
-            # Пытаемся распарсить JSON ошибку
-            try:
-                error_json = resp.json()
-                app.logger.error(f"ElevenLabs error JSON: {error_json}")
-            except:
-                pass
-            
-            return jsonify({
-                "error": "ElevenLabs API error",
-                "status": resp.status_code,
-                "details": error_text
-            }), 500
-
-        audio_bytes = resp.content
-        
-        if not audio_bytes:
-            app.logger.error("ElevenLabs вернул пустой audio")
-            return jsonify({"error": "Empty audio response from ElevenLabs"}), 500
-        
-        app.logger.info(f"Успешно получено аудио, размер: {len(audio_bytes)} байт")
-        return send_file(BytesIO(audio_bytes), mimetype="audio/mpeg")
-        
-    except requests.RequestException as e:
-        app.logger.exception("Ошибка запроса к ElevenLabs")
-        return jsonify({"error": "ElevenLabs request failed", "details": str(e)}), 502
     except Exception as e:
-        app.logger.exception("Неожиданная ошибка в /speak")
-        return jsonify({"error": "Unexpected error", "details": str(e)}), 500
+        app.logger.exception(f"Ошибка в TTS ({TTS_PROVIDER})")
+        
+        # Fallback на gTTS если ElevenLabs не работает
+        if TTS_PROVIDER == 'elevenlabs':
+            app.logger.info("Пробуем fallback на gTTS")
+            try:
+                audio_buffer = tts_gtts(text)
+                return send_file(audio_buffer, mimetype="audio/mpeg")
+            except Exception as fallback_error:
+                app.logger.exception("Fallback на gTTS тоже не сработал")
+        
+        return jsonify({"error": "TTS failed", "details": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # Для production используем debug=False
     app.run(host='0.0.0.0', port=port, debug=False)
