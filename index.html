@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Голосовой Ассистент</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-gray-800 mb-2">Голосовой Ассистент</h1>
+                <p class="text-gray-600">Нажмите на микрофон и говорите</p>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">URL сервера:</label>
+                <input type="text" id="apiUrl" value="https://your-app.onrender.com"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="flex justify-center mb-8">
+                <button id="micBtn"
+                    class="w-32 h-32 rounded-full flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 hover:scale-110 shadow-lg transition-all duration-300">
+                    <svg id="micIcon" class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="status" class="text-center mb-6 font-semibold"></div>
+
+            <div id="error" class="hidden mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p class="text-red-700 text-sm"></p>
+            </div>
+
+            <div id="transcript" class="hidden mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 class="font-semibold text-blue-900 mb-2">Вы сказали:</h3>
+                <p class="text-gray-700"></p>
+            </div>
+
+            <div id="response" class="hidden p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h3 class="font-semibold text-green-900 mb-2">Ответ ассистента:</h3>
+                <p class="text-gray-700"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        const micBtn = document.getElementById('micBtn');
+        const micIcon = document.getElementById('micIcon');
+        const status = document.getElementById('status');
+        const errorDiv = document.getElementById('error');
+        const transcriptDiv = document.getElementById('transcript');
+        const responseDiv = document.getElementById('response');
+        const apiUrlInput = document.getElementById('apiUrl');
+
+        micBtn.addEventListener('click', toggleRecording);
+
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await processAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                
+                micBtn.classList.remove('bg-indigo-500', 'hover:bg-indigo-600');
+                micBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+                status.textContent = 'Запись... Нажмите снова для остановки';
+                status.className = 'text-center mb-6 font-semibold text-red-500 animate-pulse';
+                
+                hideError();
+                hideTranscript();
+                hideResponse();
+            } catch (err) {
+                showError('Ошибка доступа к микрофону: ' + err.message);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                
+                micBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+                micBtn.classList.add('bg-indigo-500', 'hover:bg-indigo-600');
+                status.textContent = '';
+            }
+        }
+
+        async function processAudio(audioBlob) {
+            const apiUrl = apiUrlInput.value.trim();
+            
+            status.textContent = 'Обработка запроса...';
+            status.className = 'text-center mb-6 font-semibold text-indigo-500';
+            micBtn.disabled = true;
+            micBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                // Шаг 1: Транскрипция
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+
+                const transcriptRes = await fetch(`${apiUrl}/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!transcriptRes.ok) throw new Error('Ошибка транскрипции');
+                
+                const transcriptData = await transcriptRes.json();
+                showTranscript(transcriptData.text);
+
+                // Шаг 2: Получение ответа от нейронки
+                const chatRes = await fetch(`${apiUrl}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: transcriptData.text })
+                });
+
+                if (!chatRes.ok) throw new Error('Ошибка получения ответа');
+                
+                const chatData = await chatRes.json();
+                showResponse(chatData.response);
+
+                // Шаг 3: Озвучка ответа
+                const ttsRes = await fetch(`${apiUrl}/speak`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: chatData.response })
+                });
+
+                if (!ttsRes.ok) throw new Error('Ошибка озвучки');
+                
+                const audioData = await ttsRes.blob();
+                const audioUrl = URL.createObjectURL(audioData);
+                const audio = new Audio(audioUrl);
+                audio.play();
+
+                status.textContent = '';
+            } catch (err) {
+                showError('Ошибка: ' + err.message);
+            } finally {
+                micBtn.disabled = false;
+                micBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                status.textContent = '';
+            }
+        }
+
+        function showError(msg) {
+            errorDiv.querySelector('p').textContent = msg;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorDiv.classList.add('hidden');
+        }
+
+        function showTranscript(text) {
+            transcriptDiv.querySelector('p').textContent = text;
+            transcriptDiv.classList.remove('hidden');
+        }
+
+        function hideTranscript() {
+            transcriptDiv.classList.add('hidden');
+        }
+
+        function showResponse(text) {
+            responseDiv.querySelector('p').textContent = text;
+            responseDiv.classList.remove('hidden');
+        }
+
+        function hideResponse() {
+            responseDiv.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
