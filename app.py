@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import openai
-import google.generativeai as genai
 import requests
 import tempfile
 import os
@@ -11,12 +9,9 @@ app = Flask(__name__)
 CORS(app)
 
 # Настройка API ключей
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+DEEPGRAM_API_KEY = os.environ.get('DEEPGRAM_API_KEY')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY')
-
-openai.api_key = OPENAI_API_KEY
-genai.configure(api_key=GEMINI_API_KEY)
 
 # Главная страница
 @app.route('/')
@@ -28,35 +23,37 @@ def home():
 def status():
     return jsonify({"status": "Voice Assistant API running"})
 
-# Транскрибация аудио через OpenAI Whisper
+# Транскрибация аудио через Deepgram
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
     audio_file = request.files['audio']
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_audio:
-        audio_file.save(temp_audio.name)
-        temp_audio_path = temp_audio.name
+    audio_bytes = audio_file.read()
+    url = "https://api.deepgram.com/v1/listen?language=ru-RU"
+    headers = {
+        "Authorization": f"Token {DEEPGRAM_API_KEY}",
+        "Content-Type": "audio/webm"
+    }
 
-    with open(temp_audio_path, 'rb') as audio:
-        transcript = openai.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio,
-            language="ru"
-        )
+    resp = requests.post(url, headers=headers, data=audio_bytes)
+    if resp.status_code != 200:
+        return jsonify({"error": "Deepgram API error"}), 500
 
-    os.unlink(temp_audio_path)
-    return jsonify({"text": transcript.text})
+    transcript = resp.json().get('results', {}).get('channels', [{}])[0].get('alternatives', [{}])[0].get('transcript', '')
+    return jsonify({"text": transcript})
 
 # Чат с Gemini
 @app.route('/chat', methods=['POST'])
 def chat_with_gemini():
+    import google.generativeai as genai
     data = request.get_json()
     user_text = data.get('text', '')
     if not user_text:
         return jsonify({"error": "No text provided"}), 400
 
+    genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-pro')
     response = model.generate_content(user_text)
     return jsonify({"response": response.text})
