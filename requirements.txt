@@ -4,3 +4,4 @@ openai==1.12.0
 google-generativeai==0.3.2
 requests==2.31.0
 gunicorn==21.2.0
+gTTS==2.5.0
