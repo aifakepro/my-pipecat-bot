@@ -91,20 +91,35 @@ def transcribe_audio():
 def chat_with_gemini():
     data = request.get_json(silent=True)
     if not data or 'text' not in data:
+        app.logger.warning("Нет текста в запросе /chat")
         return jsonify({"error": "No text provided"}), 400
 
     user_text = data.get('text', '')
+    app.logger.info(f"Запрос к Gemini: {user_text}")  # Логируем текст запроса
+
     if not GEMINI_API_KEY:
+        app.logger.error("Gemini API key не настроен")
         return jsonify({"error": "Gemini API key not configured"}), 500
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-2.5-flash')
+
         response = model.generate_content(user_text)
-        resp_text = getattr(response, "text", None) or str(response)
+        app.logger.info(f"Ответ Gemini (raw): {response}")  # Логируем полный объект
+
+        resp_text = getattr(response, "text", None)
+        if not resp_text:
+            resp_text = str(response)  # fallback, если .text нет
+            app.logger.warning(f"Gemini вернул объект без .text, fallback к str: {resp_text}")
+
+        app.logger.info(f"Ответ Gemini (текст): {resp_text}")  # Логируем текст для фронта
         return jsonify({"response": resp_text})
+
     except Exception as e:
+        app.logger.exception("Ошибка при вызове Gemini")  # Полный трейс в логах
         return jsonify({"error": "Gemini API error", "details": str(e)}), 500
+
 
 # Озвучка текста через ElevenLabs — интерфейс не менялся: POST /speak {text: "..."} -> audio/mpeg
 @app.route('/speak', methods=['POST'])
