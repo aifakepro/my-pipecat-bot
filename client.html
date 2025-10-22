@@ -3,125 +3,349 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pipecat Bot Client</title>
-    <script src="https://unpkg.com/@daily-co/daily-js"></script>
+    <title>Pipecat Daily Client</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
         }
-        #controls {
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .input-group {
             margin-bottom: 20px;
         }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
         input {
-            padding: 10px;
-            width: 400px;
-            margin-right: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            cursor: pointer;
-        }
-        #status {
-            margin: 20px 0;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 5px;
-        }
-        #video-container {
             width: 100%;
-            height: 400px;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-connect {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-connect:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-disconnect {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-disconnect:hover:not(:disabled) {
+            background: #dc2626;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 30px;
+            padding: 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status.connecting {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status.connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status.disconnected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status.error {
+            background: #fecaca;
+            color: #7f1d1d;
+        }
+
+        .video-container {
+            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden;
             background: #000;
-            border-radius: 5px;
+            aspect-ratio: 16/9;
+            display: none;
+        }
+
+        .video-container.active {
+            display: block;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 12px;
+            background: #f3f4f6;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #92400e;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <h1>Pipecat Bot Client</h1>
-    
-    <div id="controls">
-        <input type="text" id="baseUrl" placeholder="Base URL (https://my-pipecat-bot.onrender.com)" value="https://my-pipecat-bot.onrender.com">
-        <button id="connectBtn">Connect</button>
-        <button id="disconnectBtn" disabled>Disconnect</button>
-    </div>
-    
-    <div id="status">Status: Disconnected</div>
-    
-    <div id="video-container"></div>
+    <div class="container">
+        <h1>🤖 Gemini Bot Client</h1>
+        <p class="subtitle">Connect to your Pipecat Daily bot</p>
 
-    <script>
-        let callFrame = null;
+        <div class="input-group">
+            <label for="roomUrl">Room URL</label>
+            <input 
+                type="text" 
+                id="roomUrl" 
+                placeholder="https://your-domain.daily.co/room-name"
+                value="https://your-domain.daily.co/your-room">
+        </div>
+
+        <div class="input-group">
+            <label for="token">Token (optional)</label>
+            <input 
+                type="text" 
+                id="token" 
+                placeholder="Leave empty if room doesn't require token">
+        </div>
+
+        <div class="button-group">
+            <button class="btn-connect" id="connectBtn">Connect</button>
+            <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+
+        <div id="status" class="status disconnected">
+            ⚪ Disconnected
+        </div>
+
+        <div class="video-container" id="videoContainer">
+            <video id="botVideo" autoplay playsinline></video>
+        </div>
+
+        <div class="info">
+            <strong>Note:</strong> Make sure your bot server is running and you have a valid Daily room URL.
+        </div>
+    </div>
+
+    <script type="module">
+        import { PipecatClient, RTVIEvent } from 'https://cdn.jsdelivr.net/npm/@pipecat-ai/client-js@0.4.2/+esm';
+        import { DailyTransport } from 'https://cdn.jsdelivr.net/npm/@pipecat-ai/daily-transport@1.2.1/+esm';
+
+        const roomUrlInput = document.getElementById('roomUrl');
+        const tokenInput = document.getElementById('token');
         const connectBtn = document.getElementById('connectBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
-        const status = document.getElementById('status');
-        const baseUrlInput = document.getElementById('baseUrl');
+        const statusDiv = document.getElementById('status');
+        const videoContainer = document.getElementById('videoContainer');
+        const botVideo = document.getElementById('botVideo');
+
+        let pcClient = null;
+
+        function updateStatus(message, type) {
+            statusDiv.className = `status ${type}`;
+            const icons = {
+                connecting: '🔄',
+                connected: '🟢',
+                disconnected: '⚪',
+                error: '🔴'
+            };
+            statusDiv.innerHTML = `${icons[type] || ''} ${message}`;
+        }
+
+        function setButtonsState(connecting) {
+            connectBtn.disabled = connecting;
+            disconnectBtn.disabled = !connecting;
+        }
 
         connectBtn.addEventListener('click', async () => {
-            const baseUrl = baseUrlInput.value.trim();
-            if (!baseUrl) {
-                alert('Please enter Base URL');
+            const roomUrl = roomUrlInput.value.trim();
+            const token = tokenInput.value.trim();
+
+            if (!roomUrl) {
+                updateStatus('Please enter a room URL', 'error');
                 return;
             }
 
             try {
-                status.textContent = 'Status: Connecting...';
-                connectBtn.disabled = true;
+                updateStatus('<span class="spinner"></span>Connecting...', 'connecting');
+                setButtonsState(true);
 
-                // Get room URL and token from bot server
-                const response = await fetch(`${baseUrl}/connect`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                
-                // Create Daily call frame
-                callFrame = window.DailyIframe.createFrame(
-                    document.getElementById('video-container'),
-                    {
-                        showLeaveButton: true,
-                        iframeStyle: {
-                            width: '100%',
-                            height: '100%',
-                            border: '0',
-                            borderRadius: '5px'
+                pcClient = new PipecatClient({
+                    transport: new DailyTransport(),
+                    enableMic: true,
+                    enableCam: false,
+                    callbacks: {
+                        onConnected: () => {
+                            console.log('[CALLBACK] User connected');
+                        },
+                        onDisconnected: () => {
+                            console.log('[CALLBACK] User disconnected');
+                            updateStatus('Disconnected', 'disconnected');
+                            setButtonsState(false);
+                            videoContainer.classList.remove('active');
+                        },
+                        onTransportStateChanged: (state) => {
+                            console.log('[CALLBACK] Transport state:', state);
+                        },
+                        onBotConnected: () => {
+                            console.log('[CALLBACK] Bot connected');
+                            updateStatus('Bot connected', 'connected');
+                        },
+                        onBotDisconnected: () => {
+                            console.log('[CALLBACK] Bot disconnected');
+                            updateStatus('Bot disconnected', 'disconnected');
+                        },
+                        onBotReady: () => {
+                            console.log('[CALLBACK] Bot ready to chat!');
+                            updateStatus('Bot ready! Start talking', 'connected');
+                        },
+                        onRemoteVideoTrack: (track, participant) => {
+                            console.log('[CALLBACK] Remote video track received');
+                            if (track) {
+                                const stream = new MediaStream([track]);
+                                botVideo.srcObject = stream;
+                                videoContainer.classList.add('active');
+                            }
                         }
                     }
-                );
-
-                // Join the call
-                await callFrame.join({
-                    url: data.room_url,
-                    token: data.token
                 });
 
-                status.textContent = 'Status: Connected';
-                disconnectBtn.disabled = false;
+                // Listen to events
+                pcClient.on(RTVIEvent.TransportStateChanged, (state) => {
+                    console.log('[EVENT] Transport state:', state);
+                });
+
+                pcClient.on(RTVIEvent.BotReady, () => {
+                    console.log('[EVENT] Bot ready');
+                });
+
+                const connectOptions = { url: roomUrl };
+                if (token) {
+                    connectOptions.token = token;
+                }
+
+                await pcClient.connect(connectOptions);
+                updateStatus('Connected successfully', 'connected');
 
             } catch (error) {
                 console.error('Connection error:', error);
-                status.textContent = `Status: Error - ${error.message}`;
-                connectBtn.disabled = false;
+                updateStatus(`Error: ${error.message}`, 'error');
+                setButtonsState(false);
+                pcClient = null;
             }
         });
 
         disconnectBtn.addEventListener('click', async () => {
-            if (callFrame) {
-                await callFrame.leave();
-                callFrame.destroy();
-                callFrame = null;
+            if (pcClient) {
+                try {
+                    await pcClient.disconnect();
+                    pcClient = null;
+                    updateStatus('Disconnected', 'disconnected');
+                    setButtonsState(false);
+                    videoContainer.classList.remove('active');
+                    botVideo.srcObject = null;
+                } catch (error) {
+                    console.error('Disconnect error:', error);
+                    updateStatus(`Error: ${error.message}`, 'error');
+                }
             }
-            status.textContent = 'Status: Disconnected';
-            connectBtn.disabled = false;
-            disconnectBtn.disabled = true;
         });
     </script>
 </body>
