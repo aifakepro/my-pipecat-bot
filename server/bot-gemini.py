@@ -33,7 +33,7 @@ def transcribe_audio(audio_bytes: bytes) -> str:
 # LLM: Gemini
 def get_gemini_response(text: str) -> str:
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(
             f"You are a friendly robot. Answer briefly: {text}"
         )
