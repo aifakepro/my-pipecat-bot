@@ -1,2 +1,6 @@
-pipecat-ai[livekit,daily,elevenlabs,openai,silero,google,runner,webrtc]>=0.0.82
-livekit-api>=0.5.0
+fastapi
+uvicorn
+httpx
+openai
+google-generativeai
+python-dotenv
