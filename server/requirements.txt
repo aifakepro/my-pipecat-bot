@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+python-multipart
 httpx
 openai
 google-generativeai
