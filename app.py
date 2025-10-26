@@ -106,20 +106,7 @@ def chat_with_gemini():
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        
-        # Системний промпт з інструкціями для моделі
-        system_instruction = """Ти голосовий асистент. Дотримуйся цих правил:
-- Відповідай коротко і по суті (1-3 речення для простих питань)
-- Уникай надмірного форматування markdown
-- Говори природно, як жива людина
-- Не використовуй списки без потреби
-- Якщо питання складне, давай структуровану відповідь
-- Будь ввічливим та дружнім"""
-        
-        model = genai.GenerativeModel(
-            'gemini-2.5-flash',
-            system_instruction=system_instruction
-        )
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
         response = model.generate_content(user_text)
         app.logger.info(f"Ответ Gemini (raw): {response}")
