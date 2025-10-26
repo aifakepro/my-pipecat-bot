@@ -1,14 +1,4 @@
-# Очищаємо текст від markdown форматування та зайвих символів для озвучки
-    import re
-    # Видаляємо ВСІ зірочки
-    text = re.sub(r'\*', '', text)
-    # Видаляємо решітки для заголовків
-    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
-    # Видаляємо ВСІ підкреслення
-    text = re.sub(r'_', '', text)
-    # Видаляємо код блоки
-    text = re.sub(r'```[\s\S]*?```', '', text)
-    #from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import requests
 import os
@@ -139,18 +129,16 @@ def text_to_speech():
     
     # Очищаємо текст від markdown форматування
     import re
-    # Видаляємо ВСІ зірочки (але зберігаємо пробіли)
-    text = re.sub(r'\*', '', text)
+    # Видаляємо ВСІ зірочки (*, **, ***, тощо)
+    text = re.sub(r'\*+', '', text)
     # Видаляємо решітки для заголовків (# Header)
     text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
-    # Видаляємо ВСІ підкреслення
-    text = re.sub(r'_', '', text)
+    # Видаляємо ВСІ підкреслення (_, __, тощо)
+    text = re.sub(r'_+', '', text)
     # Видаляємо код блоки (```code```)
     text = re.sub(r'```[\s\S]*?```', '', text)
-    # Видаляємо backticks
+    # Видаляємо inline код (`code`)
     text = re.sub(r'`', '', text)
-    # Прибираємо зайві пробіли
-    text = re.sub(r'\s+', ' ', text).strip()
     
     app.logger.info(f"Запрос на озвучку (после очистки): {text[:100]}...")
 
