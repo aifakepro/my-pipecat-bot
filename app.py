@@ -1,8 +1,17 @@
-from flask import Flask, request, jsonify, send_from_directory, send_file
+# Очищаємо текст від markdown форматування та зайвих символів для озвучки
+    import re
+    # Видаляємо ВСІ зірочки
+    text = re.sub(r'\*', '', text)
+    # Видаляємо решітки для заголовків
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    # Видаляємо ВСІ підкреслення
+    text = re.sub(r'_', '', text)
+    # Видаляємо код блоки
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    #from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import requests
 import os
-import re
 from io import BytesIO
 import google.generativeai as genai
 from gtts import gTTS
@@ -89,7 +98,7 @@ def chat_with_gemini():
         return jsonify({"error": "No text provided"}), 400
 
     user_text = data.get('text', '')
-    language = data.get('language', 'ru')
+    language = data.get('language', 'ru')  # За замовчуванням російська
     app.logger.info(f"Запрос к Gemini: {user_text}, язык: {language}")
 
     if not GEMINI_API_KEY:
@@ -155,33 +164,35 @@ def text_to_speech():
         return jsonify({"error": "No text provided"}), 400
 
     text = data.get('text', '').strip()
-    language = data.get('language', 'ru')
     
     if not text:
         app.logger.error("Текст пустой после strip()")
         return jsonify({"error": "Empty text provided"}), 400
     
-    # Очищаємо текст від markdown форматування та зайвих символів для озвучки
+    # Очищаємо текст від markdown форматування
+    import re
+    # Видаляємо ВСІ зірочки (але зберігаємо пробіли)
     text = re.sub(r'\*', '', text)
+    # Видаляємо решітки для заголовків (# Header)
     text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    # Видаляємо ВСІ підкреслення
     text = re.sub(r'_', '', text)
+    # Видаляємо код блоки (```code```)
     text = re.sub(r'```[\s\S]*?```', '', text)
+    # Видаляємо backticks
     text = re.sub(r'`', '', text)
-    text = text.replace('"', '').replace('"', '').replace('„', '')
-    text = text.replace("'", '').replace("'", '').replace('«', '').replace('»', '')
-    text = re.sub(r'\[.*?\]', '', text)
-    text = re.sub(r'\(http[s]?://[^\)]+\)', '', text)
+    # Прибираємо зайві пробіли
     text = re.sub(r'\s+', ' ', text).strip()
     
-    app.logger.info(f"Запрос на озвучку (после очистки): {text[:100]}..., язык: {language}")
+    app.logger.info(f"Запрос на озвучку (после очистки): {text[:100]}...")
 
     try:
-        if language not in ['uk', 'ru', 'en']:
-            language = 'ru' if any('\u0400' <= c <= '\u04FF' for c in text) else 'en'
+        # Определяем язык (если есть кириллица - русский, иначе английский)
+        lang = 'ru' if any('\u0400' <= c <= '\u04FF' for c in text) else 'en'
         
-        app.logger.info(f"Используем gTTS с языком: {language}")
+        app.logger.info(f"Используем gTTS с языком: {lang}")
         
-        tts = gTTS(text=text, lang=language, slow=False)
+        tts = gTTS(text=text, lang=lang, slow=False)
         audio_buffer = BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
