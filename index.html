@@ -3,37 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Assistant</title>
+    <title>Голосовой Ассистент</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-transparent">
+<body class="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
             <div class="text-center mb-8">
-                <h1 class="text-4xl font-bold text-gray-800 mb-2">AIFAKE voice assistant</h1>
-                <p class="text-gray-600">Click on the microphone and speak</p>
+                <h1 class="text-4xl font-bold text-gray-800 mb-2">Голосовой Ассистент</h1>
+                <p class="text-gray-600">Нажмите на микрофон и говорите</p>
             </div>
 
             <div class="mb-6">
-  <label class="block text-sm font-medium text-gray-700 mb-2">
-    Embed code:
-  </label>
-  <textarea
-    readonly
-    class="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm bg-gray-50 focus:outline-none"
-    onclick="this.select();document.execCommand('copy');"
-  ><iframe src="https://my-pipecat-bot.onrender.com/" title="Audio Agent" allow="microphone; autoplay" referrerpolicy="no-referrer" style="width:100%;max-width:800px;height:600px;border:0;"></iframe></textarea>
-  <p class="text-xs text-gray-500 mt-1">Click on the code to copy</p>
-</div>
-
+                <label class="block text-sm font-medium text-gray-700 mb-2">URL сервера:</label>
+                <input type="text" id="apiUrl" value="https://my-pipecat-bot.onrender.com"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
 
             <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Language:</label>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Мова асистента:</label>
                 <select id="languageSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                    <option value="en">🇬🇧 English</option>
                     <option value="uk">🇺🇦 Українська</option>
                     <option value="ru">🇷🇺 Русский</option>
-                    
+                    <option value="en">🇬🇧 English</option>
                 </select>
             </div>
 
@@ -53,19 +45,19 @@
             </div>
 
             <div id="transcript" class="hidden mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 class="font-semibold text-blue-900 mb-2">You said:</h3>
+                <h3 class="font-semibold text-blue-900 mb-2">Вы сказали:</h3>
                 <p class="text-gray-700"></p>
             </div>
 
             <div id="response" class="hidden p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h3 class="font-semibold text-green-900 mb-2">Assistant's response:</h3>
+                <h3 class="font-semibold text-green-900 mb-2">Ответ ассистента:</h3>
                 <p class="text-gray-700"></p>
             </div>
 
             <!-- Індикатор відтворення аудіо -->
             <div id="audioQueueIndicator" class="hidden mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                 <div class="flex items-center justify-between">
-                    <span class="text-purple-700 text-sm font-medium">🔊 Playing the answer...</span>
+                    <span class="text-purple-700 text-sm font-medium">🔊 Відтворюється відповідь...</span>
                     <button id="stopAudioBtn" class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 font-semibold">
                         ⏹ Зупинити
                     </button>
@@ -258,7 +250,7 @@
                     body: formData
                 });
 
-                if (!transcriptRes.ok) throw new Error('Transcription error');
+                if (!transcriptRes.ok) throw new Error('Ошибка транскрипции');
                 
                 const transcriptData = await transcriptRes.json();
                 showTranscript(transcriptData.text);
@@ -270,7 +262,7 @@
                     body: JSON.stringify({ text: transcriptData.text })
                 });
 
-                if (!chatRes.ok) throw new Error('Error receiving response');
+                if (!chatRes.ok) throw new Error('Ошибка получения ответа');
                 
                 const chatData = await chatRes.json();
                 showResponse(chatData.response);
