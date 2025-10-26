@@ -98,7 +98,8 @@ def chat_with_gemini():
         return jsonify({"error": "No text provided"}), 400
 
     user_text = data.get('text', '')
-    app.logger.info(f"Запрос к Gemini: {user_text}")
+    language = data.get('language', 'ru')  # За замовчуванням російська
+    app.logger.info(f"Запрос к Gemini: {user_text}, язык: {language}")
 
     if not GEMINI_API_KEY:
         app.logger.error("Gemini API key не настроен")
@@ -106,7 +107,38 @@ def chat_with_gemini():
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Системний промпт залежно від мови
+        prompts = {
+            'uk': """Ти голосовий асистент. Дотримуйся цих правил:
+- Відповідай УКРАЇНСЬКОЮ мовою
+- Відповідай коротко і по суті (1-3 речення для простих питань)
+- Уникай надмірного форматування markdown
+- Говори природно, як жива людина
+- Не використовуй списки без потреби
+- Будь ввічливим та дружнім""",
+            'ru': """Ты голосовой ассистент. Следуй этим правилам:
+- Отвечай на РУССКОМ языке
+- Отвечай кратко и по сути (1-3 предложения для простых вопросов)
+- Избегай излишнего форматирования markdown
+- Говори естественно, как живой человек
+- Не используй списки без необходимости
+- Будь вежливым и дружелюбным""",
+            'en': """You are a voice assistant. Follow these rules:
+- Respond in ENGLISH
+- Answer briefly and to the point (1-3 sentences for simple questions)
+- Avoid excessive markdown formatting
+- Speak naturally, like a real person
+- Don't use lists unless necessary
+- Be polite and friendly"""
+        }
+        
+        system_instruction = prompts.get(language, prompts['ru'])
+        
+        model = genai.GenerativeModel(
+            'gemini-2.5-flash',
+            system_instruction=system_instruction
+        )
 
         response = model.generate_content(user_text)
         app.logger.info(f"Ответ Gemini (raw): {response}")
