@@ -14,6 +14,21 @@
                 <p class="text-gray-600">Нажмите на микрофон и говорите</p>
             </div>
 
+            <!-- Код для вставки на сайт -->
+            <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">📋 Код для вставки на ваш сайт:</label>
+                <div class="relative">
+                    <textarea id="embedCode" readonly
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white font-mono text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        rows="4"></textarea>
+                    <button id="copyBtn"
+                        class="absolute top-2 right-2 px-3 py-1 bg-indigo-500 text-white rounded text-xs hover:bg-indigo-600 transition-colors">
+                        Копировать
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Вставьте этот код на ваш сайт для интеграции голосового ассистента</p>
+            </div>
+
             <div class="flex justify-center mb-8">
                 <button id="micBtn"
                     class="w-32 h-32 rounded-full flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 hover:scale-110 shadow-lg transition-all duration-300">
@@ -53,6 +68,38 @@
     <script>
         // ==================== CONFIG ====================
         const API_URL = 'https://my-pipecat-bot.onrender.com';
+        
+        // Генеруємо код для iframe
+        const currentUrl = window.location.href;
+        const embedCode = `<iframe 
+    src="${currentUrl}" 
+    width="100%" 
+    height="800" 
+    frameborder="0"
+    allow="microphone"
+    style="border-radius: 20px; max-width: 700px;"
+></iframe>`;
+
+        document.getElementById('embedCode').value = embedCode;
+
+        // Копіювання коду
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const textarea = document.getElementById('embedCode');
+            textarea.select();
+            document.execCommand('copy');
+            
+            const btn = document.getElementById('copyBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Скопировано!';
+            btn.classList.add('bg-green-500');
+            btn.classList.remove('bg-indigo-500');
+            
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.remove('bg-green-500');
+                btn.classList.add('bg-indigo-500');
+            }, 2000);
+        });
 
         // ==================== AUDIO QUEUE MANAGER ====================
         class AudioQueueManager {
