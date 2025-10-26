@@ -14,12 +14,6 @@
                 <p class="text-gray-600">Нажмите на микрофон и говорите</p>
             </div>
 
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">URL сервера:</label>
-                <input type="text" id="apiUrl" value="https://my-pipecat-bot.onrender.com"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-
             <div class="flex justify-center mb-8">
                 <button id="micBtn"
                     class="w-32 h-32 rounded-full flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 hover:scale-110 shadow-lg transition-all duration-300">
@@ -45,7 +39,6 @@
                 <p class="text-gray-700"></p>
             </div>
 
-            <!-- Індикатор відтворення аудіо -->
             <div id="audioQueueIndicator" class="hidden mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                 <div class="flex items-center justify-between">
                     <span class="text-purple-700 text-sm font-medium">🔊 Відтворюється відповідь...</span>
@@ -58,6 +51,9 @@
     </div>
 
     <script>
+        // ==================== CONFIG ====================
+        const API_URL = 'https://my-pipecat-bot.onrender.com';
+
         // ==================== AUDIO QUEUE MANAGER ====================
         class AudioQueueManager {
             constructor() {
@@ -114,13 +110,11 @@
             }
 
             stop() {
-                // Зупиняємо поточне аудіо
                 if (this.currentAudio) {
                     this.currentAudio.pause();
                     this.currentAudio.currentTime = 0;
                     this.currentAudio = null;
                 }
-                // Очищаємо всю чергу
                 this.queue.forEach(item => {
                     item.reject(new Error('Stopped by user'));
                 });
@@ -144,7 +138,6 @@
             }
         }
 
-        // Створюємо глобальний екземпляр
         const audioQueue = new AudioQueueManager();
 
         // ==================== VOICE ASSISTANT ====================
@@ -158,12 +151,9 @@
         const errorDiv = document.getElementById('error');
         const transcriptDiv = document.getElementById('transcript');
         const responseDiv = document.getElementById('response');
-        const apiUrlInput = document.getElementById('apiUrl');
         const stopAudioBtn = document.getElementById('stopAudioBtn');
 
         micBtn.addEventListener('click', toggleRecording);
-        
-        // При натисканні кнопки "Зупинити" - зупиняємо аудіо
         stopAudioBtn.addEventListener('click', () => {
             audioQueue.stop();
         });
@@ -172,7 +162,6 @@
             if (isRecording) {
                 stopRecording();
             } else {
-                // Якщо щось відтворюється - зупиняємо перед новим записом
                 if (audioQueue.isCurrentlyPlaying()) {
                     audioQueue.stop();
                 }
@@ -224,19 +213,16 @@
         }
 
         async function processAudio(audioBlob) {
-            const apiUrl = apiUrlInput.value.trim();
-            
             status.textContent = 'Обработка запроса...';
             status.className = 'text-center mb-6 font-semibold text-indigo-500';
             micBtn.disabled = true;
             micBtn.classList.add('opacity-50', 'cursor-not-allowed');
 
             try {
-                // Шаг 1: Транскрипция
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.webm');
 
-                const transcriptRes = await fetch(`${apiUrl}/transcribe`, {
+                const transcriptRes = await fetch(`${API_URL}/transcribe`, {
                     method: 'POST',
                     body: formData
                 });
@@ -246,8 +232,7 @@
                 const transcriptData = await transcriptRes.json();
                 showTranscript(transcriptData.text);
 
-                // Шаг 2: Получение ответа от нейронки
-                const chatRes = await fetch(`${apiUrl}/chat`, {
+                const chatRes = await fetch(`${API_URL}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: transcriptData.text })
@@ -258,8 +243,7 @@
                 const chatData = await chatRes.json();
                 showResponse(chatData.response);
 
-                // Шаг 3: Озвучка ответа через чергу
-                const ttsRes = await fetch(`${apiUrl}/speak`, {
+                const ttsRes = await fetch(`${API_URL}/speak`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: chatData.response })
@@ -269,9 +253,7 @@
                 
                 const audioData = await ttsRes.blob();
                 
-                // Додаємо в чергу (не чекаємо на завершення)
                 audioQueue.addToQueue(audioData).catch(err => {
-                    // Ігноруємо помилки від зупинки користувачем
                     if (err.message !== 'Stopped by user') {
                         console.error('Audio playback error:', err);
                     }
