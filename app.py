@@ -23,6 +23,7 @@ def status():
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
+    """Транскрибує аудіо за допомогою Deepgram API"""
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
 
@@ -80,6 +81,7 @@ def transcribe_audio():
 
 @app.route('/chat', methods=['POST'])
 def chat_with_gemini():
+    """Отримує відповідь від Gemini AI"""
     data = request.get_json(silent=True)
     if not data or 'text' not in data:
         app.logger.warning("Нет текста в запросе /chat")
@@ -113,6 +115,7 @@ def chat_with_gemini():
 
 @app.route('/speak', methods=['POST'])
 def text_to_speech():
+    """Перетворює текст на аудіо за допомогою gTTS"""
     data = request.get_json(silent=True)
     if not data or 'text' not in data:
         app.logger.error("Нет текста в запросе /speak")
@@ -124,7 +127,21 @@ def text_to_speech():
         app.logger.error("Текст пустой после strip()")
         return jsonify({"error": "Empty text provided"}), 400
     
-    app.logger.info(f"Запрос на озвучку: {text[:100]}...")
+    # Очищаємо текст від markdown форматування
+    import re
+    # Видаляємо зірочки для жирного тексту (**text** або *text*)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    # Видаляємо решітки для заголовків (# Header)
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    # Видаляємо підкреслення (__text__ або _text_)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    # Видаляємо код блоки (`code` або ```code```)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    
+    app.logger.info(f"Запрос на озвучку (после очистки): {text[:100]}...")
 
     try:
         # Определяем язык (если есть кириллица - русский, иначе английский)
