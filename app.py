@@ -9,7 +9,7 @@ from gtts import gTTS
 app = Flask(__name__)
 CORS(app)
 
-# Настройка API ключей из окружения
+# API keys configuration from environment
 DEEPGRAM_API_KEY = os.environ.get('DEEPGRAM_API_KEY')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
@@ -23,7 +23,7 @@ def status():
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
-    """Транскрибує аудіо за допомогою Deepgram API"""
+    """Transcribes audio using Deepgram API"""
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
 
@@ -44,7 +44,7 @@ def transcribe_audio():
     if not content_type:
         content_type = "audio/webm; codecs=opus"
 
-    url = "https://api.deepgram.com/v1/listen?model=nova-2-general&language=ru"
+    url = "https://api.deepgram.com/v1/listen?model=nova-2-general&language=en"
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}" if DEEPGRAM_API_KEY else "",
         "Content-Type": content_type
@@ -81,17 +81,17 @@ def transcribe_audio():
 
 @app.route('/chat', methods=['POST'])
 def chat_with_gemini():
-    """Отримує відповідь від Gemini AI"""
+    """Gets response from Gemini AI"""
     data = request.get_json(silent=True)
     if not data or 'text' not in data:
-        app.logger.warning("Нет текста в запросе /chat")
+        app.logger.warning("No text in /chat request")
         return jsonify({"error": "No text provided"}), 400
 
     user_text = data.get('text', '')
-    app.logger.info(f"Запрос к Gemini: {user_text}")
+    app.logger.info(f"Request to Gemini: {user_text}")
 
     if not GEMINI_API_KEY:
-        app.logger.error("Gemini API key не настроен")
+        app.logger.error("Gemini API key not configured")
         return jsonify({"error": "Gemini API key not configured"}), 500
 
     try:
@@ -99,65 +99,65 @@ def chat_with_gemini():
         model = genai.GenerativeModel('gemini-2.5-flash')
 
         response = model.generate_content(user_text)
-        app.logger.info(f"Ответ Gemini (raw): {response}")
+        app.logger.info(f"Gemini response (raw): {response}")
 
         resp_text = getattr(response, "text", None)
         if not resp_text:
             resp_text = str(response)
-            app.logger.warning(f"Gemini вернул объект без .text, fallback к str: {resp_text}")
+            app.logger.warning(f"Gemini returned object without .text, fallback to str: {resp_text}")
 
-        app.logger.info(f"Ответ Gemini (текст): {resp_text}")
+        app.logger.info(f"Gemini response (text): {resp_text}")
         return jsonify({"response": resp_text})
 
     except Exception as e:
-        app.logger.exception("Ошибка при вызове Gemini")
+        app.logger.exception("Error calling Gemini")
         return jsonify({"error": "Gemini API error", "details": str(e)}), 500
 
 @app.route('/speak', methods=['POST'])
 def text_to_speech():
-    """Перетворює текст на аудіо за допомогою gTTS"""
+    """Converts text to audio using gTTS"""
     data = request.get_json(silent=True)
     if not data or 'text' not in data:
-        app.logger.error("Нет текста в запросе /speak")
+        app.logger.error("No text in /speak request")
         return jsonify({"error": "No text provided"}), 400
 
     text = data.get('text', '').strip()
     
     if not text:
-        app.logger.error("Текст пустой после strip()")
+        app.logger.error("Text empty after strip()")
         return jsonify({"error": "Empty text provided"}), 400
     
-    # Очищаємо текст від markdown форматування
+    # Clean text from markdown formatting
     import re
-    # Видаляємо ВСІ зірочки (*, **, ***, тощо)
+    # Remove ALL asterisks (*, **, ***, etc)
     text = re.sub(r'\*+', '', text)
-    # Видаляємо решітки для заголовків (# Header)
+    # Remove hashes for headers (# Header)
     text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
-    # Видаляємо ВСІ підкреслення (_, __, тощо)
+    # Remove ALL underscores (_, __, etc)
     text = re.sub(r'_+', '', text)
-    # Видаляємо код блоки (```code```)
+    # Remove code blocks (```code```)
     text = re.sub(r'```[\s\S]*?```', '', text)
-    # Видаляємо inline код (`code`)
+    # Remove inline code (`code`)
     text = re.sub(r'`', '', text)
     
-    app.logger.info(f"Запрос на озвучку (после очистки): {text[:100]}...")
+    app.logger.info(f"TTS request (after cleaning): {text[:100]}...")
 
     try:
-        # Определяем язык (если есть кириллица - русский, иначе английский)
+        # Detect language (if Cyrillic - Russian, otherwise English)
         lang = 'ru' if any('\u0400' <= c <= '\u04FF' for c in text) else 'en'
         
-        app.logger.info(f"Используем gTTS с языком: {lang}")
+        app.logger.info(f"Using gTTS with language: {lang}")
         
         tts = gTTS(text=text, lang=lang, slow=False)
         audio_buffer = BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
         
-        app.logger.info(f"gTTS успешно сгенерировал аудио")
+        app.logger.info(f"gTTS successfully generated audio")
         return send_file(audio_buffer, mimetype="audio/mpeg")
         
     except Exception as e:
-        app.logger.exception("Ошибка в gTTS")
+        app.logger.exception("Error in gTTS")
         return jsonify({"error": "TTS failed", "details": str(e)}), 500
 
 if __name__ == '__main__':
