@@ -161,5 +161,10 @@ def text_to_speech():
         return jsonify({"error": "TTS failed", "details": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    # Render всегда задаёт PORT, используем только его
+    port_env = os.environ.get('PORT')
+    if not port_env:
+        raise RuntimeError("Environment variable PORT not set on Render")
+    port = int(port_env)
     app.run(host='0.0.0.0', port=port, debug=False)
+
