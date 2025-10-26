@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Assistant aifake.pro</title>
+    <title>Voice Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-transparent">
+<body class="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
             <div class="text-center mb-8">
-                <h1 class="text-4xl font-bold text-gray-800 mb-2">Voice Assistant aifake.pro</h1>
+                <h1 class="text-4xl font-bold text-gray-800 mb-2">Voice Assistant</h1>
                 <p class="text-gray-600">Click the microphone and speak</p>
             </div>
 
@@ -53,38 +53,6 @@
     <script>
         // ==================== CONFIG ====================
         const API_URL = 'https://my-pipecat-bot.onrender.com';
-        
-        // Generate iframe code
-        const currentUrl = window.location.href;
-        const embedCode = `<iframe 
-    src="${currentUrl}" 
-    width="100%" 
-    height="800" 
-    frameborder="0"
-    allow="microphone"
-    style="border-radius: 20px; max-width: 700px;"
-></iframe>`;
-
-        document.getElementById('embedCode').value = embedCode;
-
-        // Copy code functionality
-        document.getElementById('copyBtn').addEventListener('click', () => {
-            const textarea = document.getElementById('embedCode');
-            textarea.select();
-            document.execCommand('copy');
-            
-            const btn = document.getElementById('copyBtn');
-            const originalText = btn.textContent;
-            btn.textContent = '✓ Copied!';
-            btn.classList.add('bg-green-500');
-            btn.classList.remove('bg-indigo-500');
-            
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.classList.remove('bg-green-500');
-                btn.classList.add('bg-indigo-500');
-            }, 2000);
-        });
 
         // ==================== AUDIO QUEUE MANAGER ====================
         class AudioQueueManager {
