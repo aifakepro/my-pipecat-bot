@@ -129,17 +129,16 @@ def text_to_speech():
     
     # Очищаємо текст від markdown форматування
     import re
-    # Видаляємо зірочки для жирного тексту (**text** або *text*)
-    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    # Видаляємо ВСІ зірочки (*, **, ***, тощо)
+    text = re.sub(r'\*+', '', text)
     # Видаляємо решітки для заголовків (# Header)
     text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
-    # Видаляємо підкреслення (__text__ або _text_)
-    text = re.sub(r'__(.+?)__', r'\1', text)
-    text = re.sub(r'_(.+?)_', r'\1', text)
-    # Видаляємо код блоки (`code` або ```code```)
+    # Видаляємо ВСІ підкреслення (_, __, тощо)
+    text = re.sub(r'_+', '', text)
+    # Видаляємо код блоки (```code```)
     text = re.sub(r'```[\s\S]*?```', '', text)
-    text = re.sub(r'`(.+?)`', r'\1', text)
+    # Видаляємо inline код (`code`)
+    text = re.sub(r'`', '', text)
     
     app.logger.info(f"Запрос на озвучку (после очистки): {text[:100]}...")
 
