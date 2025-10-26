@@ -45,12 +45,12 @@
                 <p class="text-gray-700"></p>
             </div>
 
-            <!-- Індикатор черги аудіо -->
+            <!-- Індикатор відтворення аудіо -->
             <div id="audioQueueIndicator" class="hidden mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                 <div class="flex items-center justify-between">
-                    <span class="text-purple-700 text-sm font-medium">🔊 Відтворюється аудіо...</span>
-                    <button id="stopAudioBtn" class="px-3 py-1 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600">
-                        Зупинити
+                    <span class="text-purple-700 text-sm font-medium">🔊 Відтворюється відповідь...</span>
+                    <button id="stopAudioBtn" class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 font-semibold">
+                        ⏹ Зупинити
                     </button>
                 </div>
             </div>
@@ -114,11 +114,16 @@
             }
 
             stop() {
+                // Зупиняємо поточне аудіо
                 if (this.currentAudio) {
                     this.currentAudio.pause();
                     this.currentAudio.currentTime = 0;
                     this.currentAudio = null;
                 }
+                // Очищаємо всю чергу
+                this.queue.forEach(item => {
+                    item.reject(new Error('Stopped by user'));
+                });
                 this.queue = [];
                 this.isPlaying = false;
                 this.hideQueueIndicator();
@@ -157,12 +162,20 @@
         const stopAudioBtn = document.getElementById('stopAudioBtn');
 
         micBtn.addEventListener('click', toggleRecording);
-        stopAudioBtn.addEventListener('click', () => audioQueue.stop());
+        
+        // При натисканні кнопки "Зупинити" - зупиняємо аудіо
+        stopAudioBtn.addEventListener('click', () => {
+            audioQueue.stop();
+        });
 
         async function toggleRecording() {
             if (isRecording) {
                 stopRecording();
             } else {
+                // Якщо щось відтворюється - зупиняємо перед новим записом
+                if (audioQueue.isCurrentlyPlaying()) {
+                    audioQueue.stop();
+                }
                 await startRecording();
             }
         }
@@ -245,7 +258,7 @@
                 const chatData = await chatRes.json();
                 showResponse(chatData.response);
 
-                // Шаг 3: Озвучка ответа (ТЕПЕР З ЧЕРГОЮ!)
+                // Шаг 3: Озвучка ответа через чергу
                 const ttsRes = await fetch(`${apiUrl}/speak`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -256,8 +269,13 @@
                 
                 const audioData = await ttsRes.blob();
                 
-                // Додаємо в чергу замість прямого відтворення
-                await audioQueue.addToQueue(audioData);
+                // Додаємо в чергу (не чекаємо на завершення)
+                audioQueue.addToQueue(audioData).catch(err => {
+                    // Ігноруємо помилки від зупинки користувачем
+                    if (err.message !== 'Stopped by user') {
+                        console.error('Audio playback error:', err);
+                    }
+                });
 
                 status.textContent = '';
             } catch (err) {
