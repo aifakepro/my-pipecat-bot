@@ -55,6 +55,11 @@ def transcribe_audio():
     except requests.RequestException as e:
         return jsonify({"error": "Deepgram request failed", "details": str(e)}), 502
 
+    print("=== DEEPGRAM DEBUG ===")
+    print("Status:", resp.status_code)
+    print("Response:", resp.text)
+    print("======================")
+
     if resp.status_code != 200:
         return jsonify({
             "error": "Deepgram API error",
